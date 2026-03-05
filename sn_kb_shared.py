@@ -180,13 +180,25 @@ _HEADERS_JSON = {"Content-Type": "application/json", "Accept": "application/json
 def _create_igt_standard_once(instance, username, password, title, assignment_type):
     """Single attempt to create an ICW IGT Standard record."""
     url = f"{instance}/api/now/table/sn_icw_igt_standard"
+    # cmdb_assignment_type: prefer SN_ICW_ASSIGNMENT_TYPE env var, fall back to arg
+    cmdb_type = os.environ.get("SN_ICW_ASSIGNMENT_TYPE", assignment_type)
     payload = {
-        "short_description": title,
-        "detailed_description": "<p>Uploading content...</p>",
-        "state": "1",           # draft
-        "active": "true",
-        "cmdb_assignment_type": assignment_type,
+        "short_description":  title,
+        "state":              "1",    # draft
+        "active":             "true",
+        "cmdb_assignment_type": cmdb_type,
     }
+    # Optional reference fields — read from sn-igt-upload/.env if set
+    _ref_fields = {
+        "owner_group":          "SN_IGT_OWNER_GROUP",
+        "location":             "SN_IGT_LOCATION",
+        "functional_locations": "SN_IGT_FUNCTIONAL_LOCATIONS",
+        "category":             "SN_IGT_CATEGORY",
+    }
+    for sn_field, env_var in _ref_fields.items():
+        val = os.environ.get(env_var, "")
+        if val:
+            payload[sn_field] = val
     response = requests.post(
         url, auth=(username, password), headers=_HEADERS_JSON, json=payload, timeout=60,
     )

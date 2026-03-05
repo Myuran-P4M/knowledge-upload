@@ -34,7 +34,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 _script_dir = Path(__file__).parent
-load_dotenv(_script_dir.parent / ".env")
+load_dotenv(_script_dir.parent / ".env")           # shared: credentials + KB config
+load_dotenv(_script_dir / ".env", override=True)   # IGT-specific: references (takes priority)
 
 # Allow imports from sibling sn-kb-upload and parent
 sys.path.insert(0, str(_script_dir.parent))
