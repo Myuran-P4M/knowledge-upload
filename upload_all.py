@@ -2,6 +2,11 @@
 
 Digital documents (.pdf, .docx, .xlsx, .pptx) -> sn-kb-upload (local extraction)
 Document photos (.jpg, .jpeg, .png, .gif, .webp) -> sn-kb-image (Claude Vision API)
+IGT folder / --igt flag          -> sn-igt-upload (ICW Industrial Guided Task)
+
+IGT mode is activated when:
+  - the source folder name contains "igt" (case-insensitive), OR
+  - the --igt flag is passed as a command-line argument
 """
 
 import os
@@ -13,12 +18,14 @@ from dotenv import load_dotenv
 _script_dir = Path(__file__).parent
 load_dotenv(_script_dir / ".env")
 
-# Add both skill directories to sys.path for imports
+# Add all skill directories to sys.path for imports
 sys.path.insert(0, str(_script_dir / "sn-kb-upload"))
 sys.path.insert(0, str(_script_dir / "sn-kb-image"))
+sys.path.insert(0, str(_script_dir / "sn-igt-upload"))
 
 import upload_to_kb
 import image_to_kb
+import igt_to_kb
 
 from sn_kb_shared import (
     replace_base64_images,
@@ -29,6 +36,15 @@ from sn_kb_shared import (
 DIGITAL_EXTENSIONS = {".pdf", ".docx", ".xlsx", ".pptx"}
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 ALL_EXTENSIONS = DIGITAL_EXTENSIONS | IMAGE_EXTENSIONS
+
+# Folder name substrings that trigger IGT mode (case-insensitive)
+IGT_FOLDER_KEYWORDS = {"igt"}
+
+
+def _is_igt_folder(folder_path):
+    """Return True if the folder name signals IGT mode."""
+    name_lower = folder_path.name.lower()
+    return any(kw in name_lower for kw in IGT_FOLDER_KEYWORDS)
 
 
 def get_config(need_api_key):
@@ -148,7 +164,7 @@ def process_image(file_path, instance, username, password, kb_sys_id, api_key, m
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python upload_all.py <folder_path>")
+        print("Usage: python upload_all.py <folder_path> [--igt]")
         sys.exit(1)
 
     folder_path = Path(sys.argv[1])
@@ -156,6 +172,60 @@ def main():
         print(f"ERROR: '{folder_path}' is not a valid directory.")
         sys.exit(1)
 
+    # ── IGT mode: triggered by --igt flag OR folder name containing "igt" ──────
+    force_igt = "--igt" in sys.argv
+    if force_igt or _is_igt_folder(folder_path):
+        mode = "IGT"
+        print(f"Mode: IGT (Industrial Guided Task)")
+        if force_igt:
+            print("  (forced via --igt flag)")
+        else:
+            print(f"  (detected from folder name: '{folder_path.name}')")
+        print()
+
+        instance, username, password, assign_type = igt_to_kb.get_config()
+        igt_extensions = igt_to_kb.SUPPORTED_EXTENSIONS
+
+        files = [f for f in folder_path.iterdir()
+                 if f.is_file() and f.suffix.lower() in igt_extensions]
+
+        if not files:
+            print(f"No supported files found in '{folder_path}'.")
+            print(f"Supported: {', '.join(sorted(igt_extensions))}")
+            sys.exit(0)
+
+        print(f"Found {len(files)} file(s) to process as IGT Standards.\n")
+        results = {"success": [], "failed": []}
+
+        for file_path in sorted(files):
+            print(f"[igt] {file_path.name}")
+            try:
+                number, error = igt_to_kb.process_igt(
+                    file_path, instance, username, password, assign_type
+                )
+                if number:
+                    results["success"].append((file_path.name, number, "igt"))
+                else:
+                    results["failed"].append((file_path.name, error))
+            except Exception as e:
+                print(f"  ERROR ({e})")
+                results["failed"].append((file_path.name, str(e)))
+            print()
+
+        print("--- Summary ---")
+        print(f"Successful: {len(results['success'])}")
+        print(f"Failed:     {len(results['failed'])}")
+        if results["success"]:
+            print("\nCreated IGT Standards:")
+            for name, number, _ in results["success"]:
+                print(f"  [igt] {name} -> {number}")
+        if results["failed"]:
+            print("\nFailed files:")
+            for name, reason in results["failed"]:
+                print(f"  - {name}: {reason}")
+        return
+
+    # ── KB mode (default): digital + vision pipelines ─────────────────────────
     # Scan and classify files
     digital_files = []
     image_files = []

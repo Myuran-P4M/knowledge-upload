@@ -32,11 +32,11 @@ def retry_on_failure(func, *args, retries=MAX_RETRIES, description="API call", *
     raise last_exception
 
 
-def _upload_attachment_once(instance, username, password, table_sys_id, file_name, file_bytes, content_type):
+def _upload_attachment_once(instance, username, password, table_sys_id, file_name, file_bytes, content_type, table_name="kb_knowledge"):
     """Single attempt to upload a file as an attachment."""
     url = (
         f"{instance}/api/now/attachment/file"
-        f"?table_name=kb_knowledge&table_sys_id={table_sys_id}&file_name={file_name}"
+        f"?table_name={table_name}&table_sys_id={table_sys_id}&file_name={file_name}"
     )
     headers = {
         "Content-Type": content_type,
@@ -57,16 +57,16 @@ def _upload_attachment_once(instance, username, password, table_sys_id, file_nam
     return None
 
 
-def upload_attachment(instance, username, password, table_sys_id, file_name, file_bytes, content_type):
+def upload_attachment(instance, username, password, table_sys_id, file_name, file_bytes, content_type, table_name="kb_knowledge"):
     """Upload a file as an attachment with retry on transient failures."""
     return retry_on_failure(
         _upload_attachment_once,
-        instance, username, password, table_sys_id, file_name, file_bytes, content_type,
+        instance, username, password, table_sys_id, file_name, file_bytes, content_type, table_name,
         description=f"attachment upload ({file_name})",
     )
 
 
-def replace_base64_images(html, instance, username, password, article_sys_id, file_stem):
+def replace_base64_images(html, instance, username, password, article_sys_id, file_stem, table_name="kb_knowledge"):
     """Find base64 images in HTML, upload them as attachments, replace src with URLs."""
     pattern = r'src="data:(image/[^;]+);base64,([^"]+)"'
     img_counter = [0]
@@ -92,7 +92,7 @@ def replace_base64_images(html, instance, username, password, article_sys_id, fi
             img_bytes = base64.b64decode(b64_data)
             att_url = upload_attachment(
                 instance, username, password, article_sys_id,
-                file_name, img_bytes, content_type,
+                file_name, img_bytes, content_type, table_name,
             )
             if att_url:
                 return f'src="{att_url}"'
@@ -168,4 +168,85 @@ def update_article(instance, username, password, sys_id, body):
         _update_article_once,
         instance, username, password, sys_id, body,
         description="article update",
+    )
+
+
+# ── ICW Industrial Guided Task (IGT) functions ────────────────────────────────
+
+_HEADERS_JSON = {"Content-Type": "application/json", "Accept": "application/json"}
+
+
+def _create_igt_standard_once(instance, username, password, title, assignment_type):
+    """Single attempt to create an ICW IGT Standard record."""
+    url = f"{instance}/api/now/table/sn_icw_igt_standard"
+    payload = {
+        "short_description": title,
+        "detailed_description": "<p>Uploading content...</p>",
+        "state": "1",           # draft
+        "active": "true",
+        "cmdb_assignment_type": assignment_type,
+    }
+    response = requests.post(
+        url, auth=(username, password), headers=_HEADERS_JSON, json=payload, timeout=60,
+    )
+    if response.status_code in (200, 201):
+        result = response.json().get("result", {})
+        return result.get("sys_id", ""), result.get("number", "")
+    return None, response.text
+
+
+def create_igt_standard(instance, username, password, title, assignment_type="equipment"):
+    """Create a draft ICW IGT Standard with retry. Returns (sys_id, number)."""
+    return retry_on_failure(
+        _create_igt_standard_once,
+        instance, username, password, title, assignment_type,
+        description="IGT standard creation",
+    )
+
+
+def _update_igt_standard_once(instance, username, password, sys_id, html):
+    """Single attempt to update an IGT Standard's detailed_description."""
+    url = f"{instance}/api/now/table/sn_icw_igt_standard/{sys_id}"
+    response = requests.patch(
+        url, auth=(username, password), headers=_HEADERS_JSON,
+        json={"detailed_description": html}, timeout=60,
+    )
+    return response.status_code in (200, 201)
+
+
+def update_igt_standard(instance, username, password, sys_id, html):
+    """Update the IGT Standard HTML content with retry."""
+    return retry_on_failure(
+        _update_igt_standard_once,
+        instance, username, password, sys_id, html,
+        description="IGT standard update",
+    )
+
+
+def _create_igt_step_once(instance, username, password, standard_sys_id, title, instructions, order):
+    """Single attempt to create one IGT step (sn_icw_std_task)."""
+    url = f"{instance}/api/now/table/sn_icw_std_task"
+    payload = {
+        "standard":          standard_sys_id,
+        "short_description": title,
+        # 'description' and 'order' inherit from the task base class;
+        # field names may vary — adjust if the ICW instance uses different names.
+        "description":       instructions,
+        "order":             str(order),
+    }
+    response = requests.post(
+        url, auth=(username, password), headers=_HEADERS_JSON, json=payload, timeout=30,
+    )
+    if response.status_code in (200, 201):
+        result = response.json().get("result", {})
+        return result.get("sys_id", ""), result.get("number", "")
+    return None, response.text
+
+
+def create_igt_step(instance, username, password, standard_sys_id, title, instructions, order):
+    """Create one IGT step record with retry. Returns (sys_id, number)."""
+    return retry_on_failure(
+        _create_igt_step_once,
+        instance, username, password, standard_sys_id, title, instructions, order,
+        description=f"IGT step creation (order {order})",
     )
