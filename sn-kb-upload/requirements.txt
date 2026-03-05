@@ -1,0 +1,8 @@
+pymupdf
+mammoth
+openpyxl
+python-pptx
+pytesseract
+Pillow
+requests
+python-dotenv
