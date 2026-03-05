@@ -47,6 +47,7 @@ from sn_kb_shared import (
     create_igt_section,
     create_igt_question,
     update_igt_question,
+    create_igt_response_option,
 )
 
 
@@ -291,7 +292,7 @@ def process_igt(file_path, instance, username, password, assign_type):
         return None, str(number)[:200]
     print(f"OK ({number})")
 
-    # ── 3. Create assessment questions — one Checkbox question per step ────────
+    # ── 3. Create assessment questions — one Radio question per step ──────────
     print(f"  Creating {len(steps)} question(s)...", end=" ", flush=True)
 
     # The IGT Standard auto-creates a linked sn_smart_asmt_template record
@@ -300,20 +301,29 @@ def process_igt(file_path, instance, username, password, assign_type):
         print("SKIPPED (could not get assessment template)")
         return number, None
 
-    # One section groups all steps for this document
-    section_sys_id = create_igt_section(
-        instance, username, password, tmpl_sys_id,
-        name=title, order=1,
-    )
-    if not section_sys_id:
-        print("SKIPPED (could not create assessment section)")
-        return number, None
+    # One section per unique ETAPE value — tracks {etape_title: section_sys_id}
+    sections_by_etape = {}
+    section_order     = 0
 
     _CT_EXT = {"image/jpeg": "jpg", "image/png": "png", "image/gif": "gif", "image/webp": "webp"}
 
     ok_q = fail_q = 0
     for step in steps:
-        # The METHODE instruction IS the question operators read and confirm.
+        # ── Section: create once per unique ETAPE title ───────────────────────
+        etape = step["title"] or "Général"
+        if etape not in sections_by_etape:
+            section_order += 1
+            sec_id = create_igt_section(
+                instance, username, password, tmpl_sys_id,
+                name=etape, order=section_order,
+            )
+            if not sec_id:
+                fail_q += 1
+                continue
+            sections_by_etape[etape] = sec_id
+        section_sys_id = sections_by_etape[etape]
+
+        # ── Question: METHODE instruction is the question text ────────────────
         # Fall back to ETAPE title or a numbered placeholder if instructions empty.
         label = step["instructions"] or step["title"] or f"Étape {step['order']}"
 
@@ -330,7 +340,13 @@ def process_igt(file_path, instance, username, password, assign_type):
             continue
         ok_q += 1
 
-        # Upload PHOTO column images as attachments and set guidance_statement
+        # ── Response options: "Fait" (10) and "Non-fait" (20) ─────────────────
+        create_igt_response_option(instance, username, password,
+                                   q_sys_id, tmpl_sys_id, "Fait",     10)
+        create_igt_response_option(instance, username, password,
+                                   q_sys_id, tmpl_sys_id, "Non-fait", 20)
+
+        # ── Guidance: upload PHOTO column images as attachments ───────────────
         if step.get("photos"):
             img_tags = []
             for i, (photo_bytes, ct) in enumerate(step["photos"], 1):
@@ -355,6 +371,7 @@ def process_igt(file_path, instance, username, password, assign_type):
     if fail_q:
         status += f", {fail_q} FAILED"
     print(status)
+    print(f"  Sections created: {len(sections_by_etape)}")
 
     return number, None
 

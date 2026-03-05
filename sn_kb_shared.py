@@ -264,10 +264,10 @@ def create_igt_section(instance, username, password, template_sys_id, name, orde
     )
 
 
-# Checkbox question type — operator confirms completion of each step.
+# Radio button question type — operator selects "Fait" or "Non-fait" for each step.
 # sys_id is stable across instances (baseline SN record); override via
 # SN_IGT_QUESTION_TYPE env var if needed.
-_IGT_QUESTION_TYPE_CHECKBOX = "fb759e8b7771211058119a372e5a99b3"
+_IGT_QUESTION_TYPE_RADIO = "ec551e8b7771211058119a372e5a9921"
 
 
 def _create_igt_question_once(
@@ -277,7 +277,7 @@ def _create_igt_question_once(
 ):
     """Single attempt to create one assessment question (one per procedure step)."""
     url = f"{instance}/api/now/table/sn_smart_asmt_question"
-    q_type = os.environ.get("SN_IGT_QUESTION_TYPE", _IGT_QUESTION_TYPE_CHECKBOX)
+    q_type = os.environ.get("SN_IGT_QUESTION_TYPE", _IGT_QUESTION_TYPE_RADIO)
     payload = {
         "assessment_template": template_sys_id,
         "section":             section_sys_id,
@@ -327,4 +327,37 @@ def update_igt_question(instance, username, password, q_sys_id, guidance_html):
         _update_igt_question_once,
         instance, username, password, q_sys_id, guidance_html,
         description="IGT question guidance update",
+    )
+
+
+def _create_igt_response_option_once(
+    instance, username, password,
+    q_sys_id, template_sys_id, text_label, order,
+):
+    """Single attempt to create one response option on a question."""
+    url = f"{instance}/api/now/table/sn_smart_asmt_response_option"
+    payload = {
+        "question":            q_sys_id,
+        "assessment_template": template_sys_id,
+        "text_label":          text_label,
+        "order":               str(order),
+    }
+    response = requests.post(
+        url, auth=(username, password), headers=_HEADERS_JSON, json=payload, timeout=20,
+    )
+    if response.status_code in (200, 201):
+        return response.json().get("result", {}).get("sys_id", "")
+    return None
+
+
+def create_igt_response_option(
+    instance, username, password,
+    q_sys_id, template_sys_id, text_label, order,
+):
+    """Create one response option ("Fait" / "Non-fait") with retry. Returns sys_id."""
+    return retry_on_failure(
+        _create_igt_response_option_once,
+        instance, username, password,
+        q_sys_id, template_sys_id, text_label, order,
+        description=f"IGT response option ({text_label})",
     )
