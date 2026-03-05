@@ -224,8 +224,8 @@ def update_igt_standard(instance, username, password, sys_id, html):
 
 
 def _create_igt_step_once(instance, username, password, standard_sys_id, title, instructions, order):
-    """Single attempt to create one IGT step (sn_icw_std_task)."""
-    url = f"{instance}/api/now/table/sn_icw_std_task"
+    """Single attempt to create one IGT step (sn_icw_igt_task)."""
+    url = f"{instance}/api/now/table/sn_icw_igt_task"
     payload = {
         "standard":          standard_sys_id,
         "short_description": title,

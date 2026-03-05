@@ -292,7 +292,7 @@ def process_igt(file_path, instance, username, password, assign_type):
                 fail_steps += 1
         status = f"{ok_steps} OK"
         if fail_steps:
-            status += f", {fail_steps} FAILED (check field names for sn_icw_std_task)"
+            status += f", {fail_steps} FAILED (check field names for sn_icw_igt_task)"
         print(status)
 
     return number, None

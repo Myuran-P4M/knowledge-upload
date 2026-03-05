@@ -8,7 +8,7 @@ Uploads documents to ServiceNow ICW module as **Industrial Guided Task (IGT) Sta
 
 | Source | SN record created |
 |--------|-------------------|
-| One document | One `sn_icw_igt_standard` + N `sn_icw_std_task` steps |
+| One document | One `sn_icw_igt_standard` + N `sn_icw_igt_task` steps |
 | Image attached | Attachment on the IGT Standard record |
 
 ## Supported source files
@@ -88,7 +88,7 @@ python upload_all.py "my_procedures" --igt
 | `active` | `true` |
 | `cmdb_assignment_type` | `SN_ICW_ASSIGNMENT_TYPE` env var |
 
-## Step fields populated (sn_icw_std_task)
+## Step fields populated (sn_icw_igt_task)
 
 | SN field | Source |
 |----------|--------|
@@ -97,6 +97,5 @@ python upload_all.py "my_procedures" --igt
 | `description` | METHODE / Instructions column value |
 | `order` | Row index |
 
-> ⚠️ The `description` and `order` field names are based on common ServiceNow task
-> inheritance patterns. Verify against your ICW instance schema and update
-> `sn_kb_shared.create_igt_step()` if the field names differ.
+> The step table is `sn_icw_igt_task` (child class of `sn_icw_std_task`).
+> Field names `description` and `order` are inherited from the task base class.
