@@ -4,6 +4,7 @@ Contains common functions used by both the digital document pipeline (sn-kb-uplo
 and the vision-based image pipeline (sn-kb-image).
 """
 
+import os
 import re
 import base64
 import time
@@ -223,30 +224,88 @@ def update_igt_standard(instance, username, password, sys_id, html):
     )
 
 
-def _create_igt_step_once(instance, username, password, standard_sys_id, title, instructions, order):
-    """Single attempt to create one IGT step (sn_icw_igt_task)."""
-    url = f"{instance}/api/now/table/sn_icw_igt_task"
+def get_igt_assessment_template(instance, username, password, igt_standard_sys_id):
+    """Return the assessment_template sys_id auto-created with an IGT Standard."""
+    response = requests.get(
+        f"{instance}/api/now/table/sn_icw_igt_standard/{igt_standard_sys_id}",
+        auth=(username, password),
+        headers={"Accept": "application/json"},
+        params={"sysparm_fields": "assessment_template"},
+        timeout=30,
+    )
+    if response.ok:
+        val = response.json().get("result", {}).get("assessment_template", {})
+        return val.get("value", "") if isinstance(val, dict) else str(val)
+    return ""
+
+
+def _create_igt_section_once(instance, username, password, template_sys_id, name, order):
+    """Single attempt to create one assessment section for an IGT template."""
+    url = f"{instance}/api/now/table/sn_smart_asmt_section"
     payload = {
-        "standard":          standard_sys_id,
-        "short_description": title,
-        # 'description' and 'order' inherit from the task base class;
-        # field names may vary — adjust if the ICW instance uses different names.
-        "description":       instructions,
-        "order":             str(order),
+        "assessment_template": template_sys_id,
+        "name": name,
+        "order": str(order),
     }
     response = requests.post(
         url, auth=(username, password), headers=_HEADERS_JSON, json=payload, timeout=30,
     )
     if response.status_code in (200, 201):
-        result = response.json().get("result", {})
-        return result.get("sys_id", ""), result.get("number", "")
+        return response.json().get("result", {}).get("sys_id", "")
+    return None
+
+
+def create_igt_section(instance, username, password, template_sys_id, name, order=1):
+    """Create an assessment section with retry. Returns section sys_id."""
+    return retry_on_failure(
+        _create_igt_section_once,
+        instance, username, password, template_sys_id, name, order,
+        description="IGT section creation",
+    )
+
+
+# Checkbox question type — operator confirms completion of each step.
+# sys_id is stable across instances (baseline SN record); override via
+# SN_IGT_QUESTION_TYPE env var if needed.
+_IGT_QUESTION_TYPE_CHECKBOX = "fb759e8b7771211058119a372e5a99b3"
+
+
+def _create_igt_question_once(
+    instance, username, password,
+    template_sys_id, section_sys_id,
+    label, guidance_html, order,
+):
+    """Single attempt to create one assessment question (one per procedure step)."""
+    url = f"{instance}/api/now/table/sn_smart_asmt_question"
+    q_type = os.environ.get("SN_IGT_QUESTION_TYPE", _IGT_QUESTION_TYPE_CHECKBOX)
+    payload = {
+        "assessment_template": template_sys_id,
+        "section":             section_sys_id,
+        "label":               label,
+        "guidance_statement":  guidance_html,
+        "order":               str(order),
+        "mandatory":           True,
+        "question_type":       q_type,
+    }
+    response = requests.post(
+        url, auth=(username, password), headers=_HEADERS_JSON, json=payload, timeout=30,
+    )
+    if response.status_code in (200, 201):
+        sys_id = response.json().get("result", {}).get("sys_id", "")
+        return sys_id, ""
     return None, response.text
 
 
-def create_igt_step(instance, username, password, standard_sys_id, title, instructions, order):
-    """Create one IGT step record with retry. Returns (sys_id, number)."""
+def create_igt_question(
+    instance, username, password,
+    template_sys_id, section_sys_id,
+    label, guidance_html, order,
+):
+    """Create one assessment question (step) with retry. Returns (sys_id, error)."""
     return retry_on_failure(
-        _create_igt_step_once,
-        instance, username, password, standard_sys_id, title, instructions, order,
-        description=f"IGT step creation (order {order})",
+        _create_igt_question_once,
+        instance, username, password,
+        template_sys_id, section_sys_id,
+        label, guidance_html, order,
+        description=f"IGT question creation (order {order})",
     )

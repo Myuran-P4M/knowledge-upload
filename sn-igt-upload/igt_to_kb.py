@@ -1,8 +1,12 @@
 """Industrial Guided Task (IGT) upload pipeline — ServiceNow ICW module.
 
 Reads source documents and creates IGT Standard records in ServiceNow:
-  table: sn_icw_igt_standard  (extends sn_icw_std_standard)
-  steps: sn_icw_std_task       (one record per procedure step)
+  table:     sn_icw_igt_standard    (extends sn_icw_std_standard)
+  questions: sn_smart_asmt_question (one Checkbox question per procedure step,
+             grouped in one sn_smart_asmt_section per document)
+
+Each procedure step from the source document becomes an assessment question
+that the operator checks off when they complete that step in the field.
 
 Supported source files
   .docx   — full HTML via mammoth + procedure table rows extracted as steps
@@ -20,6 +24,8 @@ Triggered automatically by upload_all.py when:
 Environment variables (same .env as KB pipelines, plus):
   SN_ICW_ASSIGNMENT_TYPE  — cmdb_assignment_type value for new standards
                             (default: "equipment")
+  SN_IGT_QUESTION_TYPE    — sys_id of sn_smart_asmt_question_type to use
+                            (default: Checkbox fb759e8b7771211058119a372e5a99b3)
 """
 
 import os
@@ -40,7 +46,9 @@ from sn_kb_shared import (
     replace_base64_images,
     create_igt_standard,
     update_igt_standard,
-    create_igt_step,
+    get_igt_assessment_template,
+    create_igt_section,
+    create_igt_question,
 )
 import upload_to_kb  # reuse all extraction functions
 
@@ -274,26 +282,49 @@ def process_igt(file_path, instance, username, password, assign_type):
         return None, "Standard created but content update failed"
     print("OK")
 
-    # ── 6. Create individual step records (sn_icw_std_task) ───────────────────
+    # ── 6. Create assessment questions — one Checkbox question per step ────────
     if steps:
-        print(f"  Creating {len(steps)} step record(s)...", end=" ")
-        ok_steps = fail_steps = 0
-        for step in steps:
-            step_sys_id, _ = create_igt_step(
-                instance, username, password,
-                standard_sys_id=sys_id,
-                title=step["title"],
-                instructions=step["instructions"],
-                order=step["order"],
+        print(f"  Creating {len(steps)} question(s)...", end=" ", flush=True)
+
+        # The IGT Standard auto-creates a linked sn_smart_asmt_template record
+        tmpl_sys_id = get_igt_assessment_template(instance, username, password, sys_id)
+        if not tmpl_sys_id:
+            print("SKIPPED (could not get assessment template)")
+        else:
+            # One section groups all steps for this document
+            section_sys_id = create_igt_section(
+                instance, username, password, tmpl_sys_id,
+                name=title, order=1,
             )
-            if step_sys_id:
-                ok_steps += 1
+            if not section_sys_id:
+                print("SKIPPED (could not create assessment section)")
             else:
-                fail_steps += 1
-        status = f"{ok_steps} OK"
-        if fail_steps:
-            status += f", {fail_steps} FAILED (check field names for sn_icw_igt_task)"
-        print(status)
+                ok_q = fail_q = 0
+                for step in steps:
+                    # Wrap plain-text instructions in <p> for the guidance field
+                    instr_html = (
+                        f"<p>{step['instructions']}</p>"
+                        if step["instructions"]
+                        else ""
+                    )
+                    # label is mandatory — fall back to numbered step
+                    label = step["title"] or f"Étape {step['order']}"
+                    q_sys_id, _ = create_igt_question(
+                        instance, username, password,
+                        template_sys_id=tmpl_sys_id,
+                        section_sys_id=section_sys_id,
+                        label=label,
+                        guidance_html=instr_html,
+                        order=step["order"],
+                    )
+                    if q_sys_id:
+                        ok_q += 1
+                    else:
+                        fail_q += 1
+                status = f"{ok_q} OK"
+                if fail_q:
+                    status += f", {fail_q} FAILED"
+                print(status)
 
     return number, None
 

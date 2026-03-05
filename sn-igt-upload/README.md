@@ -1,14 +1,14 @@
 # sn-igt-upload — Industrial Guided Task Upload Pipeline
 
 Uploads documents to ServiceNow ICW module as **Industrial Guided Task (IGT) Standards**
-(`sn_icw_igt_standard` table). Steps inside procedure documents are created as individual
-`sn_icw_std_task` records linked to the standard.
+(`sn_icw_igt_standard` table). Each procedure step is created as a **Checkbox question**
+in the linked `sn_smart_asmt_template`, so operators can check off steps as they work.
 
 ## What it creates
 
-| Source | SN record created |
+| Source | SN records created |
 |--------|-------------------|
-| One document | One `sn_icw_igt_standard` + N `sn_icw_igt_task` steps |
+| One document | `sn_icw_igt_standard` + `sn_smart_asmt_template` (auto) + `sn_smart_asmt_section` + N `sn_smart_asmt_question` (one per step) |
 | Image attached | Attachment on the IGT Standard record |
 
 ## Supported source files
@@ -40,6 +40,7 @@ Uploads documents to ServiceNow ICW module as **Industrial Guided Task (IGT) Sta
 | `SN_USERNAME` | ✅ | — | ServiceNow admin username |
 | `SN_PASSWORD` | ✅ | — | ServiceNow admin password |
 | `SN_ICW_ASSIGNMENT_TYPE` | ❌ | `equipment` | `cmdb_assignment_type` value for new IGT Standards |
+| `SN_IGT_QUESTION_TYPE` | ❌ | Checkbox sys_id | `sn_smart_asmt_question_type` sys_id for step questions |
 
 > `SN_KB_SYS_ID` is **not** required — IGT Standards are not in the Knowledge Base.
 
@@ -88,14 +89,19 @@ python upload_all.py "my_procedures" --igt
 | `active` | `true` |
 | `cmdb_assignment_type` | `SN_ICW_ASSIGNMENT_TYPE` env var |
 
-## Step fields populated (sn_icw_igt_task)
+## Question fields populated (sn_smart_asmt_question)
+
+Each procedure step becomes one Checkbox question in the IGT assessment template:
 
 | SN field | Source |
 |----------|--------|
-| `standard` | Parent IGT Standard `sys_id` |
-| `short_description` | ETAPE / Step column value |
-| `description` | METHODE / Instructions column value |
+| `assessment_template` | Auto-created template linked to the IGT Standard |
+| `section` | One section per document (`sn_smart_asmt_section`) |
+| `label` | ETAPE / Step column value (question title) |
+| `guidance_statement` | METHODE / Instructions column value (shown as guidance) |
 | `order` | Row index |
+| `mandatory` | `true` |
+| `question_type` | Checkbox — operator confirms step completion |
 
-> The step table is `sn_icw_igt_task` (child class of `sn_icw_std_task`).
-> Field names `description` and `order` are inherited from the task base class.
+> Override the question type via `SN_IGT_QUESTION_TYPE` env var (sys_id of
+> the desired `sn_smart_asmt_question_type` record).
