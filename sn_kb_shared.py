@@ -309,3 +309,22 @@ def create_igt_question(
         label, guidance_html, order,
         description=f"IGT question creation (order {order})",
     )
+
+
+def _update_igt_question_once(instance, username, password, q_sys_id, guidance_html):
+    """Single attempt to update a question's guidance_statement (photo HTML)."""
+    url = f"{instance}/api/now/table/sn_smart_asmt_question/{q_sys_id}"
+    response = requests.patch(
+        url, auth=(username, password), headers=_HEADERS_JSON,
+        json={"guidance_statement": guidance_html}, timeout=30,
+    )
+    return response.status_code in (200, 201)
+
+
+def update_igt_question(instance, username, password, q_sys_id, guidance_html):
+    """Update the guidance_statement of an IGT question (e.g. with photo HTML)."""
+    return retry_on_failure(
+        _update_igt_question_once,
+        instance, username, password, q_sys_id, guidance_html,
+        description="IGT question guidance update",
+    )
