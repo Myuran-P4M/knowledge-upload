@@ -5,5 +5,9 @@ __pycache__/
 dist/
 build/
 .venv/
-.claude/
+# Ignore local Claude settings but keep project commands
+.claude/settings.local.json
+.claude/todos.json
+.claude/memory/
 Evian test docs/
+IGT docs/
