@@ -1,0 +1,80 @@
+services:
+
+  # ── Self-signed cert generator ──────────────────────────────────────────
+  # Runs once on first boot, exits when done.
+  # Writes cert.pem + key.pem into ./certs/ which nginx then uses.
+  cert-gen:
+    image: alpine/openssl:latest
+    container_name: sn-mcp-cert-gen
+    volumes:
+      - ./certs:/certs
+    entrypoint: >
+      sh -c "
+        if [ -f /certs/cert.pem ] && [ -f /certs/key.pem ]; then
+          echo '[cert-gen] Certs already exist — skipping generation.';
+        else
+          echo '[cert-gen] Generating self-signed certificate ...';
+          openssl req -x509 -newkey rsa:4096 -sha256 -days 3650 -nodes
+            -keyout /certs/key.pem
+            -out  /certs/cert.pem
+            -subj '/CN=sn-mcp-bridge'
+            -addext 'subjectAltName=IP:127.0.0.1,DNS:localhost,DNS:raspberrypi.local';
+          chmod 644 /certs/cert.pem /certs/key.pem;
+          echo '[cert-gen] Done — cert valid for 10 years.';
+        fi
+      "
+    restart: "no"
+
+  # ── MCP Bridge (Node.js + Python) ───────────────────────────────────────
+  bridge:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sn-mcp-bridge
+    restart: unless-stopped
+    expose:
+      - "3000"         # internal only — nginx handles public traffic
+    environment:
+      - MCP_AUTH_TOKEN=${MCP_AUTH_TOKEN}
+      - PROJECT_ROOT=/project
+      # ServiceNow credentials (forwarded from .env)
+      - SN_INSTANCE=${SN_INSTANCE}
+      - SN_USERNAME=${SN_USERNAME}
+      - SN_PASSWORD=${SN_PASSWORD}
+      - SN_KB_SYS_ID=${SN_KB_SYS_ID}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      # IGT Standard reference fields (from sn-igt-upload/.env)
+      - SN_ICW_ASSIGNMENT_TYPE=${SN_ICW_ASSIGNMENT_TYPE}
+      - SN_IGT_OWNER_GROUP=${SN_IGT_OWNER_GROUP}
+      - SN_IGT_LOCATION=${SN_IGT_LOCATION}
+      - SN_IGT_FUNCTIONAL_LOCATIONS=${SN_IGT_FUNCTIONAL_LOCATIONS}
+      - SN_IGT_CATEGORY=${SN_IGT_CATEGORY}
+    volumes:
+      # Mount entire project (read-only — scripts only read files)
+      - ${PROJECT_ROOT_HOST}:/project:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    depends_on:
+      cert-gen:
+        condition: service_completed_successfully
+
+  # ── nginx reverse proxy (HTTP → HTTPS) ──────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    container_name: sn-mcp-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"       # redirects to 443
+      - "443:443"     # HTTPS — expose this to ServiceNow
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./certs:/etc/nginx/certs:ro
+    depends_on:
+      cert-gen:
+        condition: service_completed_successfully
+      bridge:
+        condition: service_healthy

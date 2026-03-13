@@ -32,9 +32,9 @@ from pathlib import Path
 
 # ── Column keyword sets ────────────────────────────────────────────────────────
 
-_ETAPE_KW   = ("etape", "étape", "step", "tâche", "task", "operation", "opération")
-_METHODE_KW = ("method", "méthode", "instruction", "description", "procédure", "procedure")
-_PHOTO_KW   = ("photo", "image", "picture", "illustration", "figure", "img")
+_ETAPE_KW   = ("etape", "étape", "section", "step", "tâche", "operation", "opération")
+_METHODE_KW = ("method", "méthode", "instruction", "description", "procédure", "procedure", "action", "task", "tâche")
+_PHOTO_KW   = ("photo", "image", "picture", "illustration", "figure", "img", "guidance", "reference")
 
 
 def _col_index(headers, *keywords):
