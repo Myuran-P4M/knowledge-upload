@@ -77,17 +77,17 @@ SN knowledge upload-Claude/
                          └──────────┬────────────┘                      │
                                     │                                   │
                                     ▼                                   ▼
-              ┌─────────────────────────────────────┐  ┌───────────────────────────────────┐
-              │          sn_kb_shared.py             │  │         sn_kb_shared.py           │
-              │                                      │  │                                   │
-              │  create_article()                    │  │  create_igt_standard()            │
-              │  replace_base64_images()             │  │  get_igt_assessment_template()    │
-              │  upload_attachment()                 │  │  create_igt_section()             │
-              │  update_article()                    │  │  create_igt_question()            │
-              │  retry_on_failure()                  │  │  create_igt_response_option()     │
-              └──────────────┬───────────────────────┘  │  update_igt_question()           │
-                             │                           │  upload_attachment()             │
-                             │                           │  retry_on_failure()              │
+              ┌──────────────────────────────────────┐   ┌───────────────────────────────────┐
+              │          sn_kb_shared.py             │   │         sn_kb_shared.py           │
+              │                                      │   │                                   │
+              │  create_article()                    │   │  create_igt_standard()            │
+              │  replace_base64_images()             │   │  get_igt_assessment_template()    │
+              │  upload_attachment()                 │   │  create_igt_section()             │
+              │  update_article()                    │   │  create_igt_question()            │
+              │  retry_on_failure()                  │   │  create_igt_response_option()     │
+              └──────────────┬───────────────────────┘   │  update_igt_question()            │
+                             │                           │  upload_attachment()              │
+                             │                           │  retry_on_failure()               │
                              │                           └──────────────┬────────────────────┘
                              │                                          │
                              ▼                                          ▼

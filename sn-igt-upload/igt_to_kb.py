@@ -57,9 +57,9 @@ from sn_kb_shared import (
 SUPPORTED_EXTENSIONS = {".docx", ".xlsx"}
 
 # Column keywords used when auto-detecting procedure table headers
-_ETAPE_KW    = ("etape", "étape", "step", "tâche", "task", "operation", "opération")
-_METHODE_KW  = ("method", "méthode", "instruction", "description", "procédure", "procedure")
-_PHOTO_KW    = ("photo", "image", "picture", "illustration", "figure", "img")
+_ETAPE_KW    = ("etape", "étape", "section", "step", "tâche", "operation", "opération")
+_METHODE_KW  = ("method", "méthode", "instruction", "description", "procédure", "procedure", "action", "task", "tâche")
+_PHOTO_KW    = ("photo", "image", "picture", "illustration", "figure", "img", "guidance", "reference")
 
 
 # ── Config ────────────────────────────────────────────────────────────────────
@@ -343,9 +343,9 @@ def process_igt(file_path, instance, username, password, assign_type):
 
         # ── Response options: "Fait" (10) and "Non-fait" (20) ─────────────────
         create_igt_response_option(instance, username, password,
-                                   q_sys_id, tmpl_sys_id, "Fait",     10)
+                                   q_sys_id, tmpl_sys_id, "Done",     10)
         create_igt_response_option(instance, username, password,
-                                   q_sys_id, tmpl_sys_id, "Non-fait", 20)
+                                   q_sys_id, tmpl_sys_id, "Not Done", 20)
 
         # ── Guidance: upload PHOTO column images as attachments ───────────────
         if step.get("photos"):
