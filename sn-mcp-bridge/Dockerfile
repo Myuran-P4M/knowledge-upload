@@ -1,22 +1,22 @@
 # ── Base image: ARM64-compatible (Raspberry Pi 5) ──────────────────────────
-FROM node:20-alpine
+# node:20-slim is Debian-based — pre-built pymupdf wheels work here (Alpine/musl does not)
+FROM node:20-slim
 
 LABEL maintainer="sn-mcp-bridge"
 LABEL description="MCP Bridge: ServiceNow → Claude IGT upload skill"
 
-# Install Python 3, pip, openssl (for cert generation), curl (healthcheck)
-RUN apk add --no-cache \
+# Install Python 3, pip, curl (healthcheck)
+RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
-    py3-pip \
-    bash \
+    python3-pip \
     curl \
-    openssl
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 # Install Node dependencies first (layer cache)
-COPY package.json package-lock.json* ./
-RUN npm ci --omit=dev
+COPY package.json ./
+RUN npm install --omit=dev
 
 # Copy bridge server
 COPY app.js .
@@ -24,7 +24,8 @@ COPY app.js .
 # Install Python dependencies from the mounted project at runtime
 # (script run via entrypoint so the volume is available)
 COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+# Strip Windows CRLF line endings and make executable
+RUN sed -i 's/\r$//' /entrypoint.sh && chmod +x /entrypoint.sh
 
 EXPOSE 3000
 
